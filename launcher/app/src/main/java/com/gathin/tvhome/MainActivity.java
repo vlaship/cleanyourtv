@@ -93,6 +93,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
+    private TextView weather;
+    private boolean showWeather;
     /** config.xml show_hero_name: the big app name above the dock. */
     private boolean showHeroName;
     private int ambientColor = -1;
@@ -188,6 +190,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void run() {
             updateGreeting();
+            updateWeather();
             updateWifiLabel();
             sky.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -222,6 +225,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
         heroName = findViewById(R.id.heroName);
+        weather = findViewById(R.id.weather);
+        showWeather = getResources().getBoolean(R.bool.show_weather);
         greeting = findViewById(R.id.greeting);
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
@@ -447,6 +452,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         rebuildOnResume = false;
         updateGreeting();
+        updateWeather();
         updateWifiLabel();
         updateInputsButton();
         sky.update();
@@ -918,6 +924,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
+
+    /** Weather line above the date; the cached reading shows at once, a fresh one every 30 minutes. */
+    private void updateWeather() {
+        if (!showWeather) return;
+        Weather.refresh(this, text -> {
+            if (isDestroyed()) return;
+            weather.setText(text);
+            weather.setVisibility(View.VISIBLE);
+        });
+    }
 
     private void updateGreeting() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);

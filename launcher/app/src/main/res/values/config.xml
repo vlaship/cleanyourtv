@@ -67,6 +67,9 @@
     <bool name="show_hero_name">false</bool>
     <!-- The slightly lighter rounded band (with a thin edge) drawn behind the dock row. -->
     <bool name="show_dock_band">false</bool>
+    <!-- Current weather above the date: place from the public IP once a day (ipapi.co / ipwho.is), weather
+         from Open-Meteo every 30 minutes. Needs internet; false makes the launcher send no requests at all. -->
+    <bool name="show_weather">true</bool>
 
     <!-- Grid rows left visible under the dock on the home screen. 0 = dock sits at the very bottom. -->
     <integer name="rows_below_dock">0</integer>
