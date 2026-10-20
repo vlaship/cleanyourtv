@@ -2,6 +2,12 @@ package com.gathin.tvhome;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -11,13 +17,17 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Current weather for the header (config.xml show_weather). The TV has no GPS, so the place comes from the
- * public IP (ipapi.co, falling back to ipwho.is) once a day, and the weather from Open-Meteo every 30 minutes.
+ * Current weather for the header (config.xml show_weather). The place comes from Android's own location
+ * (network / fused provider, when Location is on in the TV's settings), otherwise from the public IP (ipapi.co,
+ * falling back to ipwho.is), once a day; the weather from Open-Meteo every 30 minutes.
  * Neither needs an API key. Everything runs on one background thread; the text is cached so Home shows the
  * last reading at once and a failed request keeps it.
  */
@@ -44,7 +54,7 @@ final class Weather {
         running = true;
         IO.execute(() -> {
             try {
-                String text = fetch(p);
+                String text = fetch(app, p);
                 if (text != null) {
                     p.edit().putString("text", text).putLong("time", System.currentTimeMillis()).apply();
                     MAIN.post(() -> listener.onWeather(text));
@@ -55,12 +65,15 @@ final class Weather {
         });
     }
 
-    private static String fetch(SharedPreferences p) {
+    private static String fetch(Context ctx, SharedPreferences p) {
         try {
-            if (System.currentTimeMillis() - p.getLong("locTime", 0) > LOCATION_MS || !p.contains("lat")) {
-                if (!locate(p, "https://ipapi.co/json/") && !locate(p, "https://ipwho.is/") && !p.contains("lat")) {
-                    return null;
-                }
+            boolean stale = System.currentTimeMillis() - p.getLong("locTime", 0) > LOCATION_MS || !p.contains("lat");
+            // A place found by IP is replaced as soon as the TV's own location becomes available.
+            boolean upgrade = !"device".equals(p.getString("src", "")) && locationOn(ctx);
+            if (stale || upgrade) {
+                boolean found = locateDevice(ctx, p);
+                if (!found && stale) found = locate(p, "https://ipapi.co/json/") || locate(p, "https://ipwho.is/");
+                if (!found && !p.contains("lat")) return null;
             }
             double lat = Double.longBitsToDouble(p.getLong("lat", 0)), lon = Double.longBitsToDouble(p.getLong("lon", 0));
             JSONObject json = new JSONObject(get(String.format(Locale.US,
@@ -87,12 +100,76 @@ final class Weather {
                     .putLong("lon", Double.doubleToLongBits(json.getDouble("longitude")))
                     .putString("city", Cards.cleanLabel(json.optString("city", ""), ""))
                     .putLong("locTime", System.currentTimeMillis())
+                    .putString("src", "ip")
                     .apply();
             return true;
         } catch (Exception e) {
             return false;
         }
     }
+
+    private static boolean locationOn(Context ctx) {
+        if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        LocationManager lm = ctx.getSystemService(LocationManager.class);
+        return lm != null && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || lm.isLocationEnabled());
+    }
+
+    /** Android's own location (Wi-Fi based on a TV) and its town; false when Location is off or does not answer. */
+    @SuppressWarnings("MissingPermission")   // checked in locationOn()
+    private static boolean locateDevice(Context ctx, SharedPreferences p) {
+        try {
+            if (!locationOn(ctx)) return false;
+            LocationManager lm = ctx.getSystemService(LocationManager.class);
+            Location loc = null;
+            for (String provider : new String[]{"fused", LocationManager.NETWORK_PROVIDER}) {
+                if (!lm.getAllProviders().contains(provider) || !lm.isProviderEnabled(provider)) continue;
+                Location last = lm.getLastKnownLocation(provider);
+                if (last != null && System.currentTimeMillis() - last.getTime() < LOCATION_MS) {
+                    loc = last;
+                    break;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    CountDownLatch done = new CountDownLatch(1);
+                    Location[] got = new Location[1];
+                    lm.getCurrentLocation(provider, null, IO_CALLBACKS, l -> {
+                        got[0] = l;
+                        done.countDown();
+                    });
+                    done.await(20, TimeUnit.SECONDS);
+                    if (got[0] != null) {
+                        loc = got[0];
+                        break;
+                    }
+                }
+            }
+            if (loc == null) return false;
+            String city = "";
+            try {
+                List<Address> found = new Geocoder(ctx, Locale.getDefault()).getFromLocation(loc.getLatitude(), loc.getLongitude(), 1);
+                if (found != null && !found.isEmpty()) {
+                    Address a = found.get(0);
+                    city = a.getLocality() != null ? a.getLocality() : a.getSubAdminArea() != null ? a.getSubAdminArea() : "";
+                }
+            } catch (Exception ignored) {
+                // No town name: the weather still shows, without it.
+            }
+            p.edit()
+                    .putLong("lat", Double.doubleToLongBits(loc.getLatitude()))
+                    .putLong("lon", Double.doubleToLongBits(loc.getLongitude()))
+                    .putString("city", Cards.cleanLabel(city, ""))
+                    .putLong("locTime", System.currentTimeMillis())
+                    .putString("src", "device")
+                    .apply();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** getCurrentLocation delivers here, not on the IO thread that is waiting for it. */
+    private static final java.util.concurrent.Executor IO_CALLBACKS = Executors.newSingleThreadExecutor();
 
     private static String get(String url) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
