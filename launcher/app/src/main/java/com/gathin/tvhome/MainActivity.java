@@ -1170,7 +1170,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             final Intent airplay = new Intent(airplayAction);
             if (getPackageManager().resolveActivity(airplay, 0) != null) {
                 if (rows.getChildCount() > 0) addSeparator(rows);
-                addInputRow(rows, popup, R.drawable.ic_av, "AirPlay", -1, () -> open(airplay));
+                addInputRow(rows, popup, R.drawable.ic_airplay, "AirPlay", -1, () -> open(airplay));
             }
         }
         Intent liveTv = liveTvIntent();
