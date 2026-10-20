@@ -70,6 +70,10 @@
     <!-- Current weather above the date: place from the public IP once a day (ipapi.co / ipwho.is), weather
          from Open-Meteo every 30 minutes. Needs internet; false makes the launcher send no requests at all. -->
     <bool name="show_weather">true</bool>
+    <!-- An "AirPlay" row at the end of the Inputs menu that opens the TV's own AirPlay settings (on, off, code).
+         AirPlay itself needs no input switch: casting from an iPhone takes over the screen. Shown only when
+         something on the TV answers this action. Empty: no row. Hisense / Vidaa: com.vt.airplay.action.showSettings -->
+    <string name="airplay_settings_action" translatable="false">com.vt.airplay.action.showSettings</string>
 
     <!-- Grid rows left visible under the dock on the home screen. 0 = dock sits at the very bottom. -->
     <integer name="rows_below_dock">0</integer>

@@ -1165,6 +1165,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (rows.getChildCount() == 0 && !sourcePanelService.isEmpty()) {
             addInputRow(rows, popup, R.drawable.ic_input, getString(R.string.inputs), -1, this::openSourcePanel);
         }
+        String airplayAction = getString(R.string.airplay_settings_action);
+        if (!airplayAction.isEmpty()) {
+            final Intent airplay = new Intent(airplayAction);
+            if (getPackageManager().resolveActivity(airplay, 0) != null) {
+                if (rows.getChildCount() > 0) addSeparator(rows);
+                addInputRow(rows, popup, R.drawable.ic_av, "AirPlay", -1, () -> open(airplay));
+            }
+        }
         Intent liveTv = liveTvIntent();
         if (liveTv != null && tunerId != null) {
             liveTv = new Intent(Intent.ACTION_VIEW)

@@ -20,6 +20,10 @@
     <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
          apps that declare a module card (docs/specs/card.md). -->
     <queries>
+        <!-- config.xml airplay_settings_action: the TV's AirPlay settings screen (Hisense / Vidaa builds). -->
+        <intent>
+            <action android:name="com.vt.airplay.action.showSettings" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
