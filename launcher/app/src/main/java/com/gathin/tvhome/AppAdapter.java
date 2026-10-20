@@ -130,6 +130,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** Calmer motion for weak GPUs (config.xml, reduced_motion): no overshoot, shorter fades. */
     private final boolean reducedMotion;
     private final List<Entry> items = new ArrayList<>();
+    /** The focused dock app's name is shown in large type above the dock, so dock tiles carry no label. */
+    private final boolean dockNameAbove;
     /** Position of the tile being moved with the D-pad, or -1. */
     private int moving = -1;
 
@@ -143,6 +145,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.advancedEffects = cfg.animations && cfg.advancedEffects;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
         this.reducedMotion = cfg.reducedMotion;
+        this.dockNameAbove = ctx.getResources().getBoolean(R.bool.show_hero_name);
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
@@ -320,7 +323,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         boolean beingMoved = position == moving;
         // The tile being moved shows arrows under it, in the dock too, so it is clear what the D-pad moves.
         h.name.setText(beingMoved ? "◀  " + e.label + "  ▶" : e.name);
-        h.name.setVisibility(position < dockSize && !beingMoved ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        // The dock has no labels while the big name above it shows the focused app (config.xml show_hero_name).
+        h.name.setVisibility(position < dockSize && dockNameAbove && !beingMoved ? View.INVISIBLE : View.VISIBLE);
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused || beingMoved ? 1f : 0f);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);
