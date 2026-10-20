@@ -1,0 +1,69 @@
+# Hisense 55U6K (device songshan, MediaTek m7632), Google TV / Android 11, build RTT2.220118.001.
+# Security patch 2026-03-01. US market; the Android model string is "SmartTV 4K FFM".
+# Package namespace is mixed: com.hisense.* (like huangshan) and com.vt.* (like hengshan).
+#
+# Apply:   TV_HOST=<tv ip> tools/disable.sh examples/hisense-55u6k-songshan/debloat.txt
+# Undo:    TV_HOST=<tv ip> tools/restore.sh examples/hisense-55u6k-songshan/debloat.txt com.google.android.apps.tv.launcherx
+# Everything is DISABLED, not uninstalled. Lines starting with # are skipped.
+#
+# WARNING: do not add com.hisense.tv.smartsense, com.vt.tv.smartsense.ui or com.vt.tv.aiot.
+# On the related huangshan firmware that family sent the TV to Android Recovery. If that screen
+# appears, pick "Try again", never "Factory data reset".
+#
+# Keep: com.mediatek.* (tv.service, wwtv.tvcenter = Live TV/HDMI, autopair = remote pairing,
+#   AirplayAPK / partner.airplay = AirPlay), com.vt.tv.input, com.vt.tv.commonui, com.hisense.tv.hitvinput,
+#   com.hisense.tv.smartservice, com.vt.tv.aipq, com.hisense.tv.videocolor, com.dolby.android.audio.service,
+#   com.vt.audio_update_service, com.vt.eula, com.hisense.tv.dlna, com.vt.miracast, com.vt.tv.mediacenter,
+#   com.hisense.tv.customerlauncher, com.hisense.uifac, com.google.android.tv.remote.service,
+#   com.google.android.apps.mediashell (Chromecast), com.google.android.tungsten.setupwraith (debloat only).
+# Already disabled at the factory: 1 package.
+
+# Hisense telemetry: ACR content recognition
+com.hisense.evservice
+
+# Hisense content, preloads and promo surfaces
+net.vidaatv.hisense.android.tv       # VIDAA free-channel preload
+com.vidaa.oemtabcontentprovider      # feeds the VIDAA content tab
+com.hisense.fte                      # first-time-experience walkthrough
+com.hisense.hibrowser                # built-in web browser
+
+# Retail demo
+fusion.android.tv.demo               # /system_ext/priv-app/RetailDisplay
+
+# Google TV ad, preload and tracking services
+android.autoinstalls.config.google.gtvpai   # silently auto-installs partner apps
+com.google.android.partnersetup             # partner referral tracking
+com.google.android.feedback                 # crash/feedback uploader
+
+# Unused on a television
+com.android.printspooler
+com.google.android.syncadapters.calendar
+com.android.providers.calendar
+com.android.providers.contacts
+
+# ---- Optional: uncomment to disable ----
+
+# Firmware updates. Disabling stops OTA security updates until re-enabled.
+# com.hisense.tv.ota
+# com.hisense.remoteupgrade
+# com.vt.tv.usbota
+
+# Voice. Alexa alone is safe to drop; katniss/assistant kill the remote's mic button.
+# com.hisense.alexa
+# com.google.android.tv.assistant
+# com.google.android.katniss
+
+# Google preloads you may not use (applied on this set)
+com.google.android.videos              # Google TV movies store
+com.google.android.youtube.tvmusic     # YouTube Music
+com.google.android.youtube.tvunplugged # YouTube TV (paid live TV)
+com.google.android.play.games
+com.peacocktv.peacockandroid           # user choice; does NOT remove Peacock from the Google TV promo carousel
+
+# Hisense background extras
+# com.hisense.tv.protector               # "DeviceAssistant" cache cleaner
+# com.vt.tv.homekitproxy                 # Apple HomeKit bridge (persistent)
+# com.google.android.apps.tv.dreamx      # Google TV ambient screensaver
+
+# Launcher phase (applied): setup wizard claims Home; owned Wi-Fi was re-joined first
+com.google.android.tungsten.setupwraith
