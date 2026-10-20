@@ -51,7 +51,16 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
         /** Called for a D-pad direction key on a tile. Return true when handled (focus stays put). */
         boolean onTileVerticalKey(int position, int keyCode);
+
+        /** Hold OK on a tile: the tile menu (move, app info, reset order). */
+        void onTileLongPress(int position, View card);
+
+        /** OK on the tile being moved: drop it where it is. */
+        void onMoveDone();
     }
+
+    /** Tile order the owner set on the TV (package names, one per line); overrides dock_apps when present. */
+    static final String ORDER_PREFS = "tile_order", ORDER_KEY = "order";
 
     static final class Entry {
         static final int APP = 0, HOME_SETTINGS = 1, CARD = 2;
@@ -121,6 +130,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** Calmer motion for weak GPUs (config.xml, reduced_motion): no overshoot, shorter fades. */
     private final boolean reducedMotion;
     private final List<Entry> items = new ArrayList<>();
+    /** Position of the tile being moved with the D-pad, or -1. */
+    private int moving = -1;
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
@@ -165,7 +176,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 fresh.add(new Entry(Cards.cleanLabel(String.valueOf(ri.loadLabel(pm)), pkg), component, banner, icon));
             }
         }
+        List<String> saved = savedOrder();
         Collections.sort(fresh, (a, b) -> {
+            // The owner's own order wins; apps it has not seen yet (new installs) follow the default rules.
+            int sa = saved.indexOf(a.pkg), sb = saved.indexOf(b.pkg);
+            if (sa >= 0 || sb >= 0) {
+                if (sa < 0) return 1;
+                if (sb < 0) return -1;
+                if (sa != sb) return Integer.compare(sa, sb);
+            }
             int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
             if (fa >= 0 || fb >= 0) {
                 if (fa < 0) return 1;
@@ -184,10 +203,80 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     new ComponentName(ctx, HomeSettingsActivity.class), null,
                     ctx.getDrawable(R.drawable.ic_home_settings), null, 0));
         }
+        moving = -1;
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
     }
+
+    private List<String> savedOrder() {
+        String s = ctx.getSharedPreferences(ORDER_PREFS, Context.MODE_PRIVATE).getString(ORDER_KEY, "");
+        return s.isEmpty() ? Collections.emptyList() : Arrays.asList(s.split("\n"));
+    }
+
+    private void saveOrder() {
+        List<String> pkgs = new ArrayList<>();
+        for (Entry e : items) if (e.kind != Entry.HOME_SETTINGS && !pkgs.contains(e.pkg)) pkgs.add(e.pkg);
+        ctx.getSharedPreferences(ORDER_PREFS, Context.MODE_PRIVATE).edit()
+                .putString(ORDER_KEY, String.join("\n", pkgs)).apply();
+    }
+
+    /** Forgets the owner's order: back to dock_apps, cards, then alphabetical on the next reload(). */
+    void resetOrder() {
+        ctx.getSharedPreferences(ORDER_PREFS, Context.MODE_PRIVATE).edit().remove(ORDER_KEY).apply();
+    }
+
+    boolean canMove(int position) {
+        return position >= 0 && position < items.size() && items.get(position).kind != Entry.HOME_SETTINGS;
+    }
+
+    boolean isMoving() {
+        return moving >= 0;
+    }
+
+    int movingPosition() {
+        return moving;
+    }
+
+    void startMove(int position) {
+        if (!canMove(position)) return;
+        moving = position;
+        notifyItemChanged(position, PAYLOAD_MOVE);
+    }
+
+    /** Moves the tile being moved to {@code to}, shifting the tiles between, and saves the new order. */
+    boolean moveTo(int to) {
+        if (moving < 0 || !canMove(to) || to == moving) return false;
+        int from = moving;
+        items.add(to, items.remove(from));
+        moving = to;
+        notifyItemMoved(from, to);
+        // Dock tiles hide their name and grid tiles show it, so rebind every tile whose row changed.
+        for (int i = Math.min(from, to); i <= Math.max(from, to); i++) notifyItemChanged(i, PAYLOAD_MOVE);
+        saveOrder();
+        return true;
+    }
+
+    void endMove() {
+        if (moving < 0) return;
+        int was = moving;
+        moving = -1;
+        notifyItemChanged(was, PAYLOAD_MOVE);
+    }
+
+    /** Opens Android's App info page for the tile's app. */
+    void openAppInfo(int position) {
+        if (position < 0 || position >= items.size()) return;
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + items.get(position).pkg));
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            ctx.startActivity(i);
+        } catch (ActivityNotFoundException ignored) {
+        }
+    }
+
+    /** Rebind payload that keeps the same holder (no cross-fade), so the focused tile keeps focus. */
+    private static final Object PAYLOAD_MOVE = new Object();
 
     private Drawable loadBanner(PackageManager pm, ResolveInfo ri) {
         int id = ri.activityInfo.banner;
@@ -228,10 +317,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     @Override
     public void onBindViewHolder(@NonNull Holder h, int position) {
         Entry e = items.get(position);
-        h.name.setText(e.name);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        boolean beingMoved = position == moving;
+        // The tile being moved shows arrows under it, in the dock too, so it is clear what the D-pad moves.
+        h.name.setText(beingMoved ? "◀  " + e.label + "  ▶" : e.name);
+        h.name.setVisibility(position < dockSize && !beingMoved ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
-        h.name.setAlpha(focused ? 1f : 0f);
+        h.name.setAlpha(focused || beingMoved ? 1f : 0f);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);
         h.card.setScaleY(focused && animations ? focusScale() : 1f);
         h.card.setTranslationY(focused && advancedEffects ? -4f * ctx.getResources().getDisplayMetrics().density : 0f);
@@ -251,16 +342,21 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.label.setText(e.label);
             h.label.setVisibility(View.VISIBLE);
         }
-        h.card.setOnClickListener(v -> launch(e));
+        h.card.setOnClickListener(v -> {
+            if (moving >= 0) listener.onMoveDone();
+            else launch(e);
+        });
         h.card.setOnLongClickListener(v -> {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                ctx.startActivity(i);
-            } catch (ActivityNotFoundException ignored) {
-            }
+            int pos = h.getBindingAdapterPosition();
+            if (moving < 0 && pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
             return true;
         });
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull Holder h, int position, @NonNull List<Object> payloads) {
+        // A move rebind is a full bind on the same holder; the payload only stops the change animation.
+        onBindViewHolder(h, position);
     }
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */

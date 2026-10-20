@@ -58,4 +58,8 @@
     <string name="card_state_new">New</string>
     <string name="card_state_new_key">New key</string>
     <string name="card_state_new_label">New name</string>
+    <string name="move_app">Move</string>
+    <string name="app_info">App info</string>
+    <string name="reset_order">Reset app order</string>
+    <string name="move_hint">Move with the arrows, press OK or Back when done</string>
 </resources>

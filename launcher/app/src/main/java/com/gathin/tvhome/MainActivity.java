@@ -43,6 +43,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
 import android.view.animation.LayoutAnimationController;
@@ -92,6 +93,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
+    /** config.xml show_hero_name: the big app name above the dock. */
+    private boolean showHeroName;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
@@ -244,7 +247,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
-        grid.addItemDecoration(new DockDecoration(COLUMNS, density));
+        grid.addItemDecoration(new DockDecoration(COLUMNS, density, getResources().getBoolean(R.bool.show_dock_band)));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -257,7 +260,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
         int rowsBelowDock = cfg.rowsBelowDock;
+        final boolean dockAtTop = getResources().getBoolean(R.bool.dock_at_top);
+        showHeroName = getResources().getBoolean(R.bool.show_hero_name);
+        if (!showHeroName) heroName.setVisibility(View.GONE);
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (dockAtTop) {
+                // Just enough room above the dock for the focus zoom and the glass glow.
+                int want = (int) (24 * density);
+                if (grid.getPaddingTop() != want) {
+                    grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+                }
+                return;
+            }
             int h = b - t;
             // Item height follows the tile size, which follows the column count (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
@@ -406,6 +420,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
+        adapter.endMove();
         grid.scrollToPosition(0);
         lastFocused = 0;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
@@ -516,6 +531,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
+        adapter.endMove();   // the order is already saved after every step
     }
 
     @Override
@@ -545,7 +561,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
-        // Home screen: Back goes nowhere.
+        // Home screen: Back goes nowhere, except out of move mode.
+        onMoveDone();
     }
 
     // ---- glass highlight -------------------------------------------------------------------------
@@ -573,7 +590,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         glassTargetX = x;
         glassTargetY = y;
-        if (!glassShown) {
+        if (adapter.isMoving()) {
+            // Move mode: no glass chasing the tile; it fades back in on the tile once the move ends.
+            hideGlass();
+        } else if (!glassShown) {
             springX.cancel();
             springY.cancel();
             glass.setTranslationX(x);
@@ -604,7 +624,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             showHero(position, scroll ? r.top - dy : r.top);
         } else {
-            hideHero();
+            // Without the big name the glow can follow every row; with it, the shelf belongs to the dock only.
+            if (showHeroName) hideHero();
+            else showHero(position, r.top);
             // Scroll just enough so the whole glass (not only the tile) is visible.
             Rect want = new Rect(0, -(int) pad * 2, item.getWidth(), item.getHeight() + (int) pad);
             grid.requestChildRectangleOnScreen(item, want, reducedMotion);
@@ -754,6 +776,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.getItemCount();
         int target;
+        if (adapter.isMoving()) {
+            // Move mode: the D-pad carries the tile; focus never leaves it until OK or Back.
+            final int to = moveTarget(adapter.movingPosition(), keyCode, count);
+            if (to >= 0 && adapter.moveTo(to)) focusAfterLayout(to);
+            return true;
+        }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
@@ -770,6 +798,87 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         focusTile(target);
         return true;
+    }
+
+    /** Where a D-pad key carries the tile being moved: one slot sideways within the row, one row up or down. */
+    private int moveTarget(int from, int keyCode, int count) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT: {
+                boolean left = keyCode == KeyEvent.KEYCODE_DPAD_LEFT;
+                if (GridNavigation.atHorizontalEdge(from, count, COLUMNS, rtlAppGrid, left)) return -1;
+                return left != rtlAppGrid ? from - 1 : from + 1;
+            }
+            case KeyEvent.KEYCODE_DPAD_UP:
+                return from >= COLUMNS ? from - COLUMNS : -1;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                return from + COLUMNS < count ? from + COLUMNS : (from / COLUMNS < (count - 1) / COLUMNS ? count - 1 : -1);
+            default:
+                return -1;
+        }
+    }
+
+    /** Hold OK on a tile: move it, open its App info, or forget the custom order. */
+    @Override
+    public void onTileLongPress(int position, View card) {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, (int) (220 * density));
+        if (adapter.canMove(position)) {
+            addSettingsMenuRow(rows, popup, R.string.move_app, () -> {
+                adapter.startMove(position);
+                hideGlass();
+                Toast.makeText(this, R.string.move_hint, Toast.LENGTH_LONG).show();
+                focusAfterLayout(position);
+            });
+        }
+        addSettingsMenuRow(rows, popup, R.string.app_info, () -> adapter.openAppInfo(position));
+        addSettingsMenuRow(rows, popup, R.string.reset_order, () -> {
+            adapter.resetOrder();
+            lastFocused = 0;
+            lastFocusedKey = null;
+            reloadApps(true);
+        });
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max((int) (220 * density), panel.getMeasuredWidth()));
+        // Tiles low on the screen have no room for the menu below them: open it above the tile instead.
+        int panelH = panel.getMeasuredHeight();
+        popup.setHeight(panelH);
+        int[] at = new int[2];
+        card.getLocationInWindow(at);
+        int gap = (int) (10 * density);
+        boolean fitsBelow = at[1] + card.getHeight() + gap + panelH <= root.getHeight();
+        if (fitsBelow) {
+            dropIn(popup, panel, card, Gravity.START);
+        } else {
+            panel.setAlpha(0f);
+            popup.showAsDropDown(card, 0, -(card.getHeight() + gap + panelH), Gravity.START);
+            panel.animate().alpha(1f).setDuration(180).start();
+        }
+        rows.getChildAt(0).requestFocus();
+    }
+
+    @Override
+    public void onMoveDone() {
+        if (!adapter.isMoving()) return;
+        int pos = adapter.movingPosition();
+        adapter.endMove();
+        focusAfterLayout(pos);
+    }
+
+    /**
+     * Focus a tile (and move the glass to it) once the grid has laid out pending adapter changes: right
+     * after a move the holders are not at their new positions yet, so the glass would stay behind.
+     */
+    private void focusAfterLayout(int position) {
+        grid.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                grid.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                focusTile(position);
+            }
+        });
+        grid.requestLayout();
     }
 
     private void focusTile(int position) {

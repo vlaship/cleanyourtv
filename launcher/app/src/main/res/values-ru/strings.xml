@@ -58,4 +58,8 @@
     <string name="on">Вкл.</string>
     <string name="off">Выкл.</string>
     <string name="enable">Включить</string>
+    <string name="move_app">Переместить</string>
+    <string name="app_info">О приложении</string>
+    <string name="reset_order">Сбросить порядок</string>
+    <string name="move_hint">Двигайте стрелками, OK или Назад — готово</string>
 </resources>

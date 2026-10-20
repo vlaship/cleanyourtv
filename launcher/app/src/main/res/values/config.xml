@@ -9,10 +9,10 @@
 
     <!-- Apps pinned to the dock row at the bottom, in this order. Missing apps are skipped. -->
     <string-array name="dock_apps">
-        <item>com.netflix.ninja</item>
-        <item>com.amazon.amazonvideo.livingroom</item>
+        <item>watch.kino</item>
         <item>com.google.android.youtube.tv</item>
-        <item>in.startv.hotstar</item>
+        <item>com.falcofemoralis.hdrezkaapp</item>
+        <item>com.apple.atve.androidtv.appletv</item>
     </string-array>
 
     <!-- Apps never shown as tiles (e.g. the Live TV app, which the Inputs menu already covers). -->
@@ -60,6 +60,14 @@
          VPN you use. Empty: the pill opens Wi-Fi settings. The green VPN badge shows for any VPN either way;
          with an app set here, a red "VPN off" badge also shows while no VPN is up. -->
     <string name="vpn_app" translatable="false"></string>
+    <!-- true: the dock sits right under the clock and buttons, with the grid filling the screen below it
+         (rows_below_dock is then ignored). false: the tvOS layout, dock pushed towards the bottom. -->
+    <bool name="dock_at_top">true</bool>
+    <!-- The focused dock app's name in large type above the dock. -->
+    <bool name="show_hero_name">false</bool>
+    <!-- The slightly lighter rounded band (with a thin edge) drawn behind the dock row. -->
+    <bool name="show_dock_band">false</bool>
+
     <!-- Grid rows left visible under the dock on the home screen. 0 = dock sits at the very bottom. -->
     <integer name="rows_below_dock">0</integer>
 
