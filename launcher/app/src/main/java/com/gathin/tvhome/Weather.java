@@ -37,7 +37,7 @@ final class Weather {
     }
 
     private static final String PREFS = "weather";
-    private static final long WEATHER_MS = 30 * 60_000L, LOCATION_MS = 24 * 60 * 60_000L;
+    private static final long WEATHER_MS = 30 * 60_000L, LOCATION_MS = 24 * 60 * 60_000L, GEO_RETRY_MS = 5 * 60_000L;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static volatile boolean running;
@@ -50,7 +50,11 @@ final class Weather {
         SharedPreferences p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String cached = p.getString("text", null);
         if (cached != null) listener.onWeather(cached);
-        if (System.currentTimeMillis() - p.getLong("time", 0) < WEATHER_MS || running) return;
+        long now = System.currentTimeMillis();
+        // Location switched on while the place came from the IP: try it now instead of waiting for the next reading.
+        boolean upgrade = !"device".equals(p.getString("src", "")) && now - p.getLong("geoTry", 0) > GEO_RETRY_MS
+                && locationOn(app);
+        if ((now - p.getLong("time", 0) < WEATHER_MS && !upgrade) || running) return;
         running = true;
         IO.execute(() -> {
             try {
@@ -119,6 +123,7 @@ final class Weather {
     /** Android's own location (Wi-Fi based on a TV) and its town; false when Location is off or does not answer. */
     @SuppressWarnings("MissingPermission")   // checked in locationOn()
     private static boolean locateDevice(Context ctx, SharedPreferences p) {
+        p.edit().putLong("geoTry", System.currentTimeMillis()).apply();
         try {
             if (!locationOn(ctx)) return false;
             LocationManager lm = ctx.getSystemService(LocationManager.class);
