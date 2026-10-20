@@ -1,3 +1,15 @@
+> **This is a fork** of [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv), built and used on a
+> **Hisense 55U6K (Google TV 11)**. Branch `hisense-55u6k` changes the launcher:
+>
+> - **Move apps with the remote:** hold OK on a tile → Move / App info / Reset app order. The order is kept on the TV.
+> - **Compact layout** (`config.xml`): `dock_at_top`, `show_hero_name=false`, `show_dock_band=false`; names under every row, ambient colour on every row.
+> - **Weather next to the clock** (`show_weather`, on by default). This is the only network use of the launcher, which adds the `INTERNET` permission:
+>   the place comes from the TV's own location when Location is on, otherwise from the public IP via `ipapi.co`
+>   (fallback `ipwho.is`) once a day; the weather from `api.open-meteo.com` every 30 minutes. Nothing else is sent.
+>   Set `show_weather` to `false` and the launcher makes no requests at all.
+> - **Navigation click** on Up/Down and while moving a tile.
+> - **AirPlay row** in Inputs that opens the TV's AirPlay settings (`airplay_settings_action`).
+> - Debloat list for this TV: [`examples/hisense-55u6k-songshan/`](examples/hisense-55u6k-songshan/debloat.txt).
 <p align="center">
   <a href="https://cleanyour.tv"><img src="https://raw.githubusercontent.com/Gathin23/cleanyourtv/main/docs/banner.png" alt="CleanYourTV. Your TV, minus the ads." width="800"></a>
 </p>
