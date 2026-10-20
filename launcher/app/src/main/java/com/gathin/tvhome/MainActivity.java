@@ -42,6 +42,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.SoundEffectConstants;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
@@ -785,7 +786,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (adapter.isMoving()) {
             // Move mode: the D-pad carries the tile; focus never leaves it until OK or Back.
             final int to = moveTarget(adapter.movingPosition(), keyCode, count);
-            if (to >= 0 && adapter.moveTo(to)) focusAfterLayout(to);
+            if (to >= 0 && adapter.moveTo(to)) {
+                navSound(keyCode);
+                focusAfterLayout(to);
+            }
             return true;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
@@ -803,7 +807,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             target = Math.min(position + COLUMNS, count - 1);
         }
         focusTile(target);
+        navSound(keyCode);   // the default focus search plays this for left/right; up/down are handled here
         return true;
+    }
+
+    private void navSound(int keyCode) {
+        int effect = keyCode == KeyEvent.KEYCODE_DPAD_UP ? SoundEffectConstants.NAVIGATION_UP
+                : keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? SoundEffectConstants.NAVIGATION_DOWN
+                : keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? SoundEffectConstants.NAVIGATION_LEFT
+                : SoundEffectConstants.NAVIGATION_RIGHT;
+        grid.playSoundEffect(effect);
     }
 
     /** Where a D-pad key carries the tile being moved: one slot sideways within the row, one row up or down. */
